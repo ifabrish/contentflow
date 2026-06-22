@@ -1,0 +1,883 @@
+import { useState, useRef, useCallback } from "react";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const PLATFORMS = [
+  { id: "instagram", label: "Instagram", color: "#E1306C", icon: "📸" },
+  { id: "twitter",   label: "X / Twitter", color: "#1DA1F2", icon: "𝕏" },
+  { id: "linkedin",  label: "LinkedIn",   color: "#0A66C2", icon: "in" },
+  { id: "tiktok",    label: "TikTok",     color: "#69C9D0", icon: "♪" },
+  { id: "facebook",  label: "Facebook",   color: "#1877F2", icon: "f" },
+  { id: "youtube",   label: "YouTube",    color: "#FF0000", icon: "▶" },
+];
+
+const CONTENT_TYPES = ["Post","Story","Reel","Thread","Video","Article","Newsletter"];
+
+const TEAM_MEMBERS = [
+  { id: 1, name: "Alex Rivera",   role: "Media Manager",    avatar: "AR", color: "#6366f1" },
+  { id: 2, name: "Sam Chen",      role: "Content Creator",  avatar: "SC", color: "#8b5cf6" },
+  { id: 3, name: "Jordan Park",   role: "Content Creator",  avatar: "JP", color: "#a855f7" },
+  { id: 4, name: "Morgan Lee",    role: "Media Manager",    avatar: "ML", color: "#d946ef" },
+  { id: 5, name: "Taylor Brooks", role: "Copywriter",       avatar: "TB", color: "#ec4899" },
+  { id: 6, name: "Casey Nguyen",  role: "Video Producer",   avatar: "CN", color: "#f97316" },
+  { id: 7, name: "Riley Kim",     role: "Graphic Designer", avatar: "RK", color: "#14b8a6" },
+  { id: 8, name: "Drew Santos",   role: "Analyst",          avatar: "DS", color: "#eab308" },
+];
+
+const STATUS_COLORS = {
+  draft:     { bg: "#1e1b2e", text: "#a78bfa", border: "#4c1d95" },
+  review:    { bg: "#1a1f2e", text: "#60a5fa", border: "#1e3a5f" },
+  approved:  { bg: "#0f2a1a", text: "#4ade80", border: "#14532d" },
+  scheduled: { bg: "#1a1a0f", text: "#facc15", border: "#422006" },
+  published: { bg: "#0f2020", text: "#2dd4bf", border: "#134e4a" },
+};
+
+const HOURS = Array.from({ length: 24 }, (_, i) => {
+  const h = i % 12 === 0 ? 12 : i % 12;
+  return `${h}:00 ${i < 12 ? "AM" : "PM"}`;
+});
+
+const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+const SAMPLE_POSTS = [
+  { id:1, title:"Summer Campaign Launch",    platforms:["instagram","twitter"],  type:"Post",     status:"approved",  assignee:1, scheduledDate:"2026-06-22", scheduledTime:"10:00 AM", caption:"Summer is here and so are our biggest deals yet! 🌞 #SummerSale #NewArrival", tags:["#SummerSale","#Campaign"], engagement:{ likes:0, comments:0, reach:0 } },
+  { id:2, title:"Behind the Scenes Reel",    platforms:["instagram","tiktok"],   type:"Reel",     status:"review",    assignee:2, scheduledDate:"2026-06-23", scheduledTime:"3:00 PM",  caption:"A peek behind the curtain 🎬 Watch how the magic happens!", tags:["#BTS","#Reels"], engagement:{ likes:0, comments:0, reach:0 } },
+  { id:3, title:"Product Feature Highlight", platforms:["linkedin","twitter"],   type:"Article",  status:"draft",     assignee:3, scheduledDate:"2026-06-24", scheduledTime:"9:00 AM",  caption:"Discover how our new feature saves teams 5+ hours a week. Read more →", tags:["#ProductUpdate","#Tech"], engagement:{ likes:0, comments:0, reach:0 } },
+  { id:4, title:"Weekly Tips Thread",        platforms:["twitter"],              type:"Thread",   status:"scheduled", assignee:4, scheduledDate:"2026-06-21", scheduledTime:"12:00 PM", caption:"🧵 5 content strategies that actually work in 2026:", tags:["#ContentTips","#Marketing"], engagement:{ likes:0, comments:0, reach:0 } },
+  { id:5, title:"Customer Success Story",    platforms:["facebook","linkedin"],  type:"Post",     status:"published", assignee:1, scheduledDate:"2026-06-20", scheduledTime:"11:00 AM", caption:"Meet Sarah — how she grew her business 300% using our platform 🚀", tags:["#Success","#Testimonial"], engagement:{ likes:247, comments:38, reach:4200 } },
+  { id:6, title:"Q2 Product Roundup",        platforms:["linkedin"],             type:"Article",  status:"published", assignee:5, scheduledDate:"2026-06-18", scheduledTime:"9:00 AM",  caption:"Everything we shipped in Q2 — and what's coming next. A thread worth bookmarking.", tags:["#Product","#Q2"], engagement:{ likes:189, comments:27, reach:3100 } },
+  { id:7, title:"Team Spotlight: Riley",     platforms:["instagram","linkedin"], type:"Post",     status:"published", assignee:7, scheduledDate:"2026-06-15", scheduledTime:"2:00 PM",  caption:"Meet the designer behind our visual identity 🎨 @rileykim shares her process.", tags:["#TeamSpotlight","#Design"], engagement:{ likes:312, comments:54, reach:5800 } },
+  { id:8, title:"Tutorial: Getting Started", platforms:["youtube","tiktok"],    type:"Video",    status:"scheduled", assignee:6, scheduledDate:"2026-06-25", scheduledTime:"5:00 PM",  caption:"New tutorial is live! Learn how to set up your workspace in under 10 mins ▶️", tags:["#Tutorial","#HowTo"], engagement:{ likes:0, comments:0, reach:0 } },
+  { id:9, title:"June Newsletter",           platforms:["facebook"],             type:"Newsletter",status:"draft",    assignee:5, scheduledDate:"2026-06-28", scheduledTime:"8:00 AM",  caption:"This month in ContentFlow: new features, team news, and your June content tips.", tags:["#Newsletter"], engagement:{ likes:0, comments:0, reach:0 } },
+];
+
+// ─── Shared Styles ────────────────────────────────────────────────────────────
+
+const inputStyle = {
+  width:"100%", padding:"9px 12px", borderRadius:9,
+  border:"1px solid #2a2040", background:"#0d0a17",
+  color:"#c4b5e0", fontSize:13, marginBottom:14,
+  boxSizing:"border-box", outline:"none", fontFamily:"inherit",
+};
+const labelStyle = {
+  display:"block", fontSize:11, color:"#5a4f7a",
+  fontWeight:600, textTransform:"uppercase", letterSpacing:1, marginBottom:5,
+};
+const navBtn = {
+  padding:"5px 12px", borderRadius:7, border:"1px solid #2a2040",
+  background:"transparent", color:"#7c6fa0", cursor:"pointer", fontSize:12,
+};
+
+// ─── Small Components ─────────────────────────────────────────────────────────
+
+function Avatar({ member, size = 32 }) {
+  return (
+    <div style={{
+      width:size, height:size, borderRadius:"50%",
+      background:member.color, display:"flex", alignItems:"center",
+      justifyContent:"center", fontSize:size*0.33, fontWeight:700,
+      color:"#fff", flexShrink:0, fontFamily:"monospace",
+      border:"2px solid rgba(255,255,255,0.15)", letterSpacing:-0.5,
+    }}>{member.avatar}</div>
+  );
+}
+
+function PlatformBadge({ platformId, small }) {
+  const p = PLATFORMS.find(x => x.id === platformId);
+  if (!p) return null;
+  return (
+    <span style={{
+      display:"inline-flex", alignItems:"center", justifyContent:"center",
+      width:small?20:26, height:small?20:26,
+      borderRadius:6, background:p.color+"22",
+      border:`1px solid ${p.color}44`, fontSize:small?10:12,
+      color:p.color, fontWeight:800, flexShrink:0,
+    }} title={p.label}>{p.icon}</span>
+  );
+}
+
+function StatusBadge({ status }) {
+  const s = STATUS_COLORS[status] || STATUS_COLORS.draft;
+  return (
+    <span style={{
+      padding:"2px 10px", borderRadius:99, fontSize:11, fontWeight:600,
+      background:s.bg, color:s.text, border:`1px solid ${s.border}`,
+      textTransform:"capitalize", letterSpacing:0.3, whiteSpace:"nowrap",
+    }}>{status}</span>
+  );
+}
+
+function Modal({ children, onClose, wide }) {
+  return (
+    <div style={{
+      position:"fixed", inset:0, background:"rgba(0,0,0,0.8)",
+      zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center",
+      padding:20,
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background:"#110e1a", border:"1px solid #2a2040",
+        borderRadius:18, maxWidth:wide?780:640, width:"100%",
+        maxHeight:"92vh", overflowY:"auto",
+        boxShadow:"0 24px 80px rgba(0,0,0,0.7)",
+      }}>{children}</div>
+    </div>
+  );
+}
+
+// ─── AI Caption Generator ─────────────────────────────────────────────────────
+
+function AICaptionPanel({ title, platforms, type, onSelect }) {
+  const [topic, setTopic] = useState(title || "");
+  const [tone, setTone] = useState("engaging");
+  const [captions, setCaptions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const TONES = ["engaging","professional","playful","inspirational","urgent","storytelling"];
+
+  const generate = async () => {
+    if (!topic.trim()) return;
+    setLoading(true); setError(""); setCaptions([]);
+    try {
+      const platformNames = platforms.map(id => PLATFORMS.find(p=>p.id===id)?.label).filter(Boolean).join(", ");
+      const prompt = `You are a social media copywriter. Generate 3 distinct ${tone} captions for a ${type || "post"} about: "${topic}". 
+Platforms: ${platformNames || "general social media"}.
+Rules: Each caption should be platform-appropriate, include 2–3 relevant hashtags, and be under 280 characters.
+Respond ONLY with a JSON array of 3 strings. No markdown, no preamble. Example: ["Caption 1 #tag","Caption 2 #tag","Caption 3 #tag"]`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          model:"claude-sonnet-4-6",
+          max_tokens:600,
+          messages:[{ role:"user", content:prompt }],
+        }),
+      });
+      const data = await res.json();
+      const raw = data.content?.map(b=>b.text||"").join("").trim();
+      const clean = raw.replace(/```json|```/g,"").trim();
+      const parsed = JSON.parse(clean);
+      setCaptions(Array.isArray(parsed) ? parsed : []);
+    } catch(e) {
+      setError("Caption generation failed. Check your connection and try again.");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ background:"#0d0a17", borderRadius:14, padding:16, border:"1px solid #2a2040", marginBottom:16 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+        <span style={{ fontSize:16 }}>✨</span>
+        <span style={{ fontSize:13, fontWeight:700, color:"#a855f7" }}>AI Caption Generator</span>
+      </div>
+
+      <label style={labelStyle}>Topic / Description</label>
+      <input value={topic} onChange={e=>setTopic(e.target.value)}
+        placeholder="What is this post about?" style={{...inputStyle, marginBottom:10}} />
+
+      <label style={labelStyle}>Tone</label>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
+        {TONES.map(t => (
+          <button key={t} onClick={()=>setTone(t)} style={{
+            padding:"4px 10px", borderRadius:7, cursor:"pointer", fontSize:11, fontWeight:600,
+            border:`1px solid ${tone===t?"#7c3aed":"#2a2040"}`,
+            background:tone===t?"#7c3aed22":"transparent",
+            color:tone===t?"#a855f7":"#5a4f7a", textTransform:"capitalize",
+          }}>{t}</button>
+        ))}
+      </div>
+
+      <button onClick={generate} disabled={loading} style={{
+        width:"100%", padding:"9px", borderRadius:9, border:"none", cursor:loading?"wait":"pointer",
+        background:loading?"#2a2040":"linear-gradient(135deg,#7c3aed,#a855f7)",
+        color:loading?"#5a4f7a":"#fff", fontSize:13, fontWeight:700,
+        transition:"all 0.2s",
+      }}>
+        {loading ? "✨ Generating captions…" : "✨ Generate Captions"}
+      </button>
+
+      {error && <div style={{ fontSize:12, color:"#f87171", marginTop:8 }}>{error}</div>}
+
+      {captions.length > 0 && (
+        <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:8 }}>
+          {captions.map((c,i) => (
+            <div key={i} style={{
+              background:"#16131f", borderRadius:10, padding:"10px 12px",
+              border:"1px solid #2a2040", cursor:"pointer",
+              transition:"border-color 0.15s",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="#7c3aed"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="#2a2040"}
+              onClick={()=>onSelect(c)}
+            >
+              <div style={{ fontSize:12, color:"#c4b5e0", lineHeight:1.6, marginBottom:6 }}>{c}</div>
+              <button style={{
+                fontSize:10, color:"#a855f7", background:"#7c3aed22",
+                border:"1px solid #4c1d95", borderRadius:6, padding:"2px 8px", cursor:"pointer",
+              }}>Use this caption →</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Post Card (drag-enabled) ─────────────────────────────────────────────────
+
+function PostCard({ post, onClick, onDragStart, onDragEnd, dragging }) {
+  const member = TEAM_MEMBERS.find(m => m.id === post.assignee);
+  const s = STATUS_COLORS[post.status];
+  return (
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed="move"; onDragStart(post); }}
+      onDragEnd={onDragEnd}
+      onClick={() => onClick(post)}
+      style={{
+        background: dragging ? "#1e1a2e" : "#16131f",
+        border:`1px solid ${s.border}44`,
+        borderRadius:12, padding:"13px 15px",
+        cursor:"grab", transition:"all 0.18s",
+        borderLeft:`3px solid ${s.text}`,
+        opacity: dragging ? 0.5 : 1,
+        userSelect:"none",
+      }}
+      onMouseEnter={e => { if(!dragging){ e.currentTarget.style.background="#1e1a2e"; e.currentTarget.style.transform="translateY(-2px)"; }}}
+      onMouseLeave={e => { e.currentTarget.style.background="#16131f"; e.currentTarget.style.transform="none"; }}
+    >
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:8 }}>
+        <div style={{ fontWeight:600, fontSize:13, color:"#e2d9f3", lineHeight:1.3, flex:1 }}>{post.title}</div>
+        <StatusBadge status={post.status} />
+      </div>
+      <div style={{ fontSize:12, color:"#7c6fa0", marginBottom:8, lineHeight:1.5 }}>
+        {post.caption.slice(0,80)}{post.caption.length>80?"…":""}
+      </div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <div style={{ display:"flex", gap:4 }}>
+          {post.platforms.map(p => <PlatformBadge key={p} platformId={p} small />)}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:11, color:"#5a4f7a" }}>{post.scheduledTime} · {post.scheduledDate?.slice(5)}</span>
+          {member && <Avatar member={member} size={22} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Board with Drag & Drop ───────────────────────────────────────────────────
+
+function BoardView({ posts, onPostClick, onStatusChange }) {
+  const [draggingPost, setDraggingPost] = useState(null);
+  const [dragOverStatus, setDragOverStatus] = useState(null);
+
+  const handleDrop = (status) => {
+    if (draggingPost && draggingPost.status !== status) {
+      onStatusChange(draggingPost.id, status);
+    }
+    setDraggingPost(null);
+    setDragOverStatus(null);
+  };
+
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(230px, 1fr))", gap:16 }}>
+      {Object.keys(STATUS_COLORS).map(status => {
+        const sc = STATUS_COLORS[status];
+        const colPosts = posts.filter(p => p.status === status);
+        const isOver = dragOverStatus === status;
+        return (
+          <div
+            key={status}
+            onDragOver={e => { e.preventDefault(); setDragOverStatus(status); }}
+            onDragLeave={() => setDragOverStatus(null)}
+            onDrop={() => handleDrop(status)}
+            style={{
+              display:"flex", flexDirection:"column", gap:10,
+              background: isOver ? sc.bg : "transparent",
+              borderRadius:14, padding:isOver?"10px":0,
+              border: isOver ? `2px dashed ${sc.text}` : "2px dashed transparent",
+              transition:"all 0.15s", minHeight:200,
+            }}
+          >
+            <div style={{ display:"flex", alignItems:"center", gap:8, paddingBottom:10, borderBottom:`1px solid ${sc.border}` }}>
+              <span style={{ width:8, height:8, borderRadius:"50%", background:sc.text, flexShrink:0, boxShadow:`0 0 8px ${sc.text}` }} />
+              <span style={{ fontSize:12, fontWeight:700, color:sc.text, textTransform:"capitalize", letterSpacing:0.3 }}>{status}</span>
+              <span style={{ marginLeft:"auto", fontSize:11, color:"#3d3355", fontWeight:700 }}>{colPosts.length}</span>
+            </div>
+            {colPosts.map(p => (
+              <PostCard
+                key={p.id} post={p}
+                onClick={onPostClick}
+                onDragStart={setDraggingPost}
+                onDragEnd={() => { setDraggingPost(null); setDragOverStatus(null); }}
+                dragging={draggingPost?.id === p.id}
+              />
+            ))}
+            {colPosts.length === 0 && (
+              <div style={{
+                fontSize:12, color: isOver ? sc.text : "#2d2645",
+                textAlign:"center", padding:"24px 0", fontStyle:"italic",
+                border: isOver ? "none" : "2px dashed #1a1628",
+                borderRadius:10,
+              }}>
+                {isOver ? `Drop here to mark as ${status}` : "No posts yet"}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Post Detail Modal ────────────────────────────────────────────────────────
+
+function PostDetail({ post, onClose, onStatusChange }) {
+  const member = TEAM_MEMBERS.find(m => m.id === post.assignee);
+  const statuses = ["draft","review","approved","scheduled","published"];
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ padding:"24px 28px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+          <div>
+            <div style={{ fontSize:18, fontWeight:700, color:"#e2d9f3", marginBottom:4 }}>{post.title}</div>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <span style={{ fontSize:11, color:"#6b5f8a", background:"#1a1628", padding:"2px 8px", borderRadius:6, border:"1px solid #2a2040" }}>{post.type}</span>
+              <StatusBadge status={post.status} />
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:"#5a4f7a", cursor:"pointer", fontSize:22, lineHeight:1 }}>✕</button>
+        </div>
+
+        <div style={{ background:"#0d0a17", borderRadius:12, padding:16, marginBottom:16, border:"1px solid #1e1a2e" }}>
+          <div style={{ fontSize:13, color:"#c4b5e0", lineHeight:1.7 }}>{post.caption}</div>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:10 }}>
+            {post.tags.map(t => (
+              <span key={t} style={{ fontSize:11, color:"#7c6fa0", background:"#1a1628", padding:"2px 8px", borderRadius:6 }}>{t}</span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+          <div style={{ background:"#0d0a17", borderRadius:10, padding:"12px 14px", border:"1px solid #1e1a2e" }}>
+            <div style={{ fontSize:10, color:"#5a4f7a", fontWeight:600, textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Platforms</div>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {post.platforms.map(p => {
+                const pl = PLATFORMS.find(x=>x.id===p);
+                return <span key={p} style={{ fontSize:12, color:pl?.color, display:"flex", alignItems:"center", gap:4 }}>{pl?.icon} {pl?.label}</span>;
+              })}
+            </div>
+          </div>
+          <div style={{ background:"#0d0a17", borderRadius:10, padding:"12px 14px", border:"1px solid #1e1a2e" }}>
+            <div style={{ fontSize:10, color:"#5a4f7a", fontWeight:600, textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Schedule</div>
+            <div style={{ fontSize:13, color:"#c4b5e0" }}>{post.scheduledDate}</div>
+            <div style={{ fontSize:12, color:"#7c6fa0" }}>{post.scheduledTime}</div>
+          </div>
+        </div>
+
+        {member && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"#0d0a17", borderRadius:10, border:"1px solid #1e1a2e", marginBottom:16 }}>
+            <Avatar member={member} size={34} />
+            <div>
+              <div style={{ fontSize:13, color:"#c4b5e0", fontWeight:600 }}>{member.name}</div>
+              <div style={{ fontSize:11, color:"#5a4f7a" }}>{member.role}</div>
+            </div>
+          </div>
+        )}
+
+        {post.status==="published" && post.engagement.likes > 0 && (
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:16 }}>
+            {[["Likes",post.engagement.likes,"#4ade80"],["Comments",post.engagement.comments,"#60a5fa"],["Reach",post.engagement.reach,"#f472b6"]].map(([label,val,color])=>(
+              <div key={label} style={{ background:"#0d1a0d", borderRadius:10, padding:"12px 14px", border:"1px solid #14532d", textAlign:"center" }}>
+                <div style={{ fontSize:22, fontWeight:800, color }}>{val.toLocaleString()}</div>
+                <div style={{ fontSize:11, color:"#5a4f7a" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div>
+          <div style={{ fontSize:11, color:"#5a4f7a", fontWeight:600, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Move to status</div>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {statuses.filter(s=>s!==post.status).map(s => {
+              const sc = STATUS_COLORS[s];
+              return (
+                <button key={s} onClick={()=>onStatusChange(post.id,s)} style={{
+                  padding:"6px 14px", borderRadius:8, border:`1px solid ${sc.border}`,
+                  background:sc.bg, color:sc.text, cursor:"pointer", fontSize:12,
+                  fontWeight:600, textTransform:"capitalize", transition:"all 0.15s",
+                }}
+                  onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
+                  onMouseLeave={e=>e.currentTarget.style.opacity="1"}
+                >{s}</button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── New Post Modal ───────────────────────────────────────────────────────────
+
+function NewPostModal({ onClose, onSave }) {
+  const [form, setForm] = useState({
+    title:"", caption:"", platforms:[], type:"Post",
+    status:"draft", assignee:1, scheduledDate:"2026-06-25", scheduledTime:"10:00 AM", tags:"",
+  });
+  const [showAI, setShowAI] = useState(false);
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const togglePlatform = p => set("platforms", form.platforms.includes(p)?form.platforms.filter(x=>x!==p):[...form.platforms,p]);
+
+  return (
+    <Modal onClose={onClose} wide>
+      <div style={{ padding:"24px 28px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
+          <div style={{ fontSize:18, fontWeight:700, color:"#e2d9f3" }}>New Post</div>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <button onClick={()=>setShowAI(a=>!a)} style={{
+              padding:"6px 14px", borderRadius:8, border:"1px solid #4c1d95",
+              background: showAI ? "#7c3aed22" : "transparent",
+              color:"#a855f7", cursor:"pointer", fontSize:12, fontWeight:600,
+            }}>✨ AI Captions {showAI?"▲":"▼"}</button>
+            <button onClick={onClose} style={{ background:"none", border:"none", color:"#5a4f7a", cursor:"pointer", fontSize:22 }}>✕</button>
+          </div>
+        </div>
+
+        {showAI && (
+          <AICaptionPanel
+            title={form.title} platforms={form.platforms} type={form.type}
+            onSelect={c => { set("caption", c); setShowAI(false); }}
+          />
+        )}
+
+        <label style={labelStyle}>Title</label>
+        <input value={form.title} onChange={e=>set("title",e.target.value)} placeholder="Campaign name or post title…" style={inputStyle} />
+
+        <label style={labelStyle}>Caption / Copy</label>
+        <textarea value={form.caption} onChange={e=>set("caption",e.target.value)}
+          placeholder="Write your post content or generate with AI ✨" rows={4}
+          style={{...inputStyle, resize:"vertical"}} />
+
+        <label style={labelStyle}>Platforms</label>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
+          {PLATFORMS.map(p => {
+            const active = form.platforms.includes(p.id);
+            return (
+              <button key={p.id} onClick={()=>togglePlatform(p.id)} style={{
+                padding:"6px 12px", borderRadius:8, cursor:"pointer", fontSize:12,
+                border:`1px solid ${active?p.color:"#2a2040"}`,
+                background:active?p.color+"22":"#0d0a17",
+                color:active?p.color:"#5a4f7a", fontWeight:600, transition:"all 0.15s",
+              }}>{p.icon} {p.label}</button>
+            );
+          })}
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:16 }}>
+          <div>
+            <label style={labelStyle}>Content Type</label>
+            <select value={form.type} onChange={e=>set("type",e.target.value)} style={inputStyle}>
+              {CONTENT_TYPES.map(t=><option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Assign to</label>
+            <select value={form.assignee} onChange={e=>set("assignee",Number(e.target.value))} style={inputStyle}>
+              {TEAM_MEMBERS.map(m=><option key={m.id} value={m.id}>{m.name} — {m.role}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Date</label>
+            <input type="date" value={form.scheduledDate} onChange={e=>set("scheduledDate",e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Time</label>
+            <select value={form.scheduledTime} onChange={e=>set("scheduledTime",e.target.value)} style={inputStyle}>
+              {HOURS.map(h=><option key={h}>{h}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <label style={labelStyle}>Tags (comma separated)</label>
+        <input value={form.tags} onChange={e=>set("tags",e.target.value)} placeholder="#Campaign, #Product" style={inputStyle} />
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={onClose} style={{ padding:"10px 20px", borderRadius:10, border:"1px solid #2a2040", background:"transparent", color:"#7c6fa0", cursor:"pointer", fontSize:13, fontWeight:600 }}>Cancel</button>
+          <button onClick={()=>{
+            if(!form.title||!form.platforms.length) return;
+            onSave({ ...form, id:Date.now(), tags:form.tags.split(",").map(t=>t.trim()).filter(Boolean), engagement:{likes:0,comments:0,reach:0} });
+          }} style={{
+            padding:"10px 24px", borderRadius:10, border:"none",
+            background:"linear-gradient(135deg,#7c3aed,#a855f7)",
+            color:"#fff", cursor:"pointer", fontSize:13, fontWeight:700,
+            boxShadow:"0 4px 14px rgba(124,58,237,0.4)",
+          }}>Schedule Post</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Calendar View ────────────────────────────────────────────────────────────
+
+function CalendarView({ posts, onPostClick }) {
+  const today = new Date(2026,5,20);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate()-today.getDay()+weekOffset*7);
+  const weekDays = Array.from({length:7},(_,i)=>{ const d=new Date(startOfWeek); d.setDate(startOfWeek.getDate()+i); return d; });
+  const postsForDay = d => posts.filter(p=>p.scheduledDate===d.toISOString().slice(0,10));
+  const isToday = d => d.toISOString().slice(0,10)==="2026-06-20";
+  const fmt = d => d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+        <div style={{ fontSize:14, fontWeight:600, color:"#c4b5e0" }}>{fmt(weekDays[0])} – {fmt(weekDays[6])}</div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={()=>setWeekOffset(w=>w-1)} style={navBtn}>‹ Prev</button>
+          <button onClick={()=>setWeekOffset(0)} style={{...navBtn,color:"#a855f7",borderColor:"#4c1d95"}}>Today</button>
+          <button onClick={()=>setWeekOffset(w=>w+1)} style={navBtn}>Next ›</button>
+        </div>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:10 }}>
+        {weekDays.map((day,i)=>{
+          const dp=postsForDay(day); const active=isToday(day);
+          return (
+            <div key={i} style={{ background:active?"#1a1030":"#0f0c1a", borderRadius:12, padding:"10px 10px", border:`1px solid ${active?"#6d28d9":"#1a1628"}`, minHeight:150 }}>
+              <div style={{ marginBottom:8, textAlign:"center" }}>
+                <div style={{ fontSize:10, color:"#5a4f7a", fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 }}>{DAYS[day.getDay()]}</div>
+                <div style={{ fontSize:18, fontWeight:800, color:active?"#a855f7":"#7c6fa0", lineHeight:1.2 }}>{day.getDate()}</div>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                {dp.slice(0,3).map(p=>{
+                  const s=STATUS_COLORS[p.status];
+                  return (
+                    <div key={p.id} onClick={()=>onPostClick(p)} style={{
+                      background:s.bg, border:`1px solid ${s.border}`,
+                      borderRadius:6, padding:"4px 7px", cursor:"pointer",
+                      borderLeft:`3px solid ${s.text}`,
+                    }}
+                      onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
+                      onMouseLeave={e=>e.currentTarget.style.opacity="1"}
+                    >
+                      <div style={{ fontSize:10, color:s.text, fontWeight:600, lineHeight:1.3 }}>{p.title.slice(0,15)}{p.title.length>15?"…":""}</div>
+                      <div style={{ fontSize:9, color:"#5a4f7a" }}>{p.scheduledTime}</div>
+                    </div>
+                  );
+                })}
+                {dp.length>3 && <div style={{ fontSize:10, color:"#5a4f7a", textAlign:"center" }}>+{dp.length-3} more</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Team View ────────────────────────────────────────────────────────────────
+
+function TeamView({ posts }) {
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))", gap:14 }}>
+      {TEAM_MEMBERS.map(member => {
+        const mp = posts.filter(p=>p.assignee===member.id);
+        const counts = Object.keys(STATUS_COLORS).reduce((acc,s)=>({...acc,[s]:mp.filter(p=>p.status===s).length}),{});
+        const totalEngagement = mp.reduce((a,p)=>a+(p.engagement.likes||0),0);
+        return (
+          <div key={member.id} style={{ background:"#0f0c1a", borderRadius:14, padding:"14px 16px", border:"1px solid #1a1628" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <Avatar member={member} size={40} />
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:"#e2d9f3" }}>{member.name}</div>
+                <div style={{ fontSize:11, color:"#5a4f7a" }}>{member.role}</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:18, fontWeight:800, color:"#a855f7" }}>{mp.length}</div>
+                <div style={{ fontSize:10, color:"#5a4f7a" }}>posts</div>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:10 }}>
+              {Object.entries(counts).filter(([,v])=>v>0).map(([s,v])=>{
+                const sc=STATUS_COLORS[s];
+                return (
+                  <span key={s} style={{ fontSize:10, padding:"2px 7px", borderRadius:99, background:sc.bg, color:sc.text, border:`1px solid ${sc.border}`, fontWeight:600, textTransform:"capitalize" }}>
+                    {v} {s}
+                  </span>
+                );
+              })}
+            </div>
+            {totalEngagement>0 && (
+              <div style={{ fontSize:11, color:"#4ade80", background:"#0d1a0d", borderRadius:8, padding:"5px 10px", border:"1px solid #14532d" }}>
+                ❤️ {totalEngagement.toLocaleString()} total likes earned
+              </div>
+            )}
+            <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:10 }}>
+              {mp.slice(0,2).map(p=>(
+                <div key={p.id} style={{ display:"flex", alignItems:"center", gap:8, fontSize:11, color:"#7c6fa0" }}>
+                  <div style={{ display:"flex", gap:3 }}>{p.platforms.map(pl=><PlatformBadge key={pl} platformId={pl} small />)}</div>
+                  <span style={{ flex:1, color:"#a89cc0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.title}</span>
+                  <span style={{ flexShrink:0, fontSize:10, color:"#5a4f7a" }}>{p.scheduledDate?.slice(5)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Analytics View ───────────────────────────────────────────────────────────
+
+function AnalyticsView({ posts }) {
+  const published = posts.filter(p=>p.status==="published");
+  const totalLikes = published.reduce((a,p)=>a+(p.engagement.likes||0),0);
+  const totalComments = published.reduce((a,p)=>a+(p.engagement.comments||0),0);
+  const totalReach = published.reduce((a,p)=>a+(p.engagement.reach||0),0);
+  const totalPosts = posts.length;
+
+  // Posts by platform
+  const platformData = PLATFORMS.map(pl=>({
+    name: pl.label.split(" ")[0],
+    count: posts.filter(p=>p.platforms.includes(pl.id)).length,
+    color: pl.color,
+  })).filter(d=>d.count>0);
+
+  // Posts by status
+  const statusData = Object.entries(STATUS_COLORS).map(([s,sc])=>({
+    name: s, value: posts.filter(p=>p.status===s).length, color: sc.text,
+  })).filter(d=>d.value>0);
+
+  // Engagement by post
+  const engData = published.filter(p=>p.engagement.likes>0).map(p=>({
+    name: p.title.slice(0,18)+(p.title.length>18?"…":""),
+    likes: p.engagement.likes, comments: p.engagement.comments, reach: p.engagement.reach,
+  }));
+
+  // Posts per member
+  const memberData = TEAM_MEMBERS.map(m=>({
+    name: m.name.split(" ")[0],
+    posts: posts.filter(p=>p.assignee===m.id).length,
+    color: m.color,
+  })).filter(d=>d.posts>0);
+
+  const StatCard = ({ label, value, color, sub }) => (
+    <div style={{ background:"#0f0c1a", borderRadius:14, padding:"18px 20px", border:"1px solid #1a1628", flex:1 }}>
+      <div style={{ fontSize:28, fontWeight:800, color: color||"#e2d9f3" }}>{typeof value==="number"?value.toLocaleString():value}</div>
+      <div style={{ fontSize:12, color:"#5a4f7a", fontWeight:600, marginTop:2 }}>{label}</div>
+      {sub && <div style={{ fontSize:11, color:"#3d3355", marginTop:4 }}>{sub}</div>}
+    </div>
+  );
+
+  const ChartBox = ({ title, children }) => (
+    <div style={{ background:"#0f0c1a", borderRadius:14, padding:"18px 20px", border:"1px solid #1a1628" }}>
+      <div style={{ fontSize:13, fontWeight:700, color:"#c4b5e0", marginBottom:16 }}>{title}</div>
+      {children}
+    </div>
+  );
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active||!payload?.length) return null;
+    return (
+      <div style={{ background:"#1a1628", border:"1px solid #2a2040", borderRadius:8, padding:"8px 12px", fontSize:11 }}>
+        <div style={{ color:"#c4b5e0", fontWeight:600, marginBottom:4 }}>{label}</div>
+        {payload.map((p,i)=>(
+          <div key={i} style={{ color:p.color||"#a855f7" }}>{p.name}: {p.value?.toLocaleString()}</div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+      {/* Stat row */}
+      <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
+        <StatCard label="Total Posts" value={totalPosts} color="#a855f7" />
+        <StatCard label="Published" value={published.length} color="#2dd4bf" sub={`${Math.round(published.length/Math.max(totalPosts,1)*100)}% of all posts`} />
+        <StatCard label="Total Likes" value={totalLikes} color="#4ade80" />
+        <StatCard label="Total Reach" value={totalReach} color="#f472b6" />
+      </div>
+
+      {/* Charts row 1 */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+        <ChartBox title="Posts by Platform">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={platformData} margin={{top:0,right:0,left:-20,bottom:0}}>
+              <XAxis dataKey="name" tick={{fill:"#5a4f7a",fontSize:11}} axisLine={false} tickLine={false} />
+              <YAxis tick={{fill:"#5a4f7a",fontSize:11}} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="count" radius={[6,6,0,0]}>
+                {platformData.map((d,i)=><Cell key={i} fill={d.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartBox>
+
+        <ChartBox title="Posts by Status">
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={statusData} cx="50%" cy="50%" outerRadius={75} dataKey="value" label={({name,value})=>`${name} ${value}`} labelLine={false} fontSize={10}>
+                  {statusData.map((d,i)=><Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartBox>
+      </div>
+
+      {/* Charts row 2 */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+        {engData.length > 0 && (
+          <ChartBox title="Engagement by Post">
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={engData} margin={{top:0,right:0,left:-20,bottom:30}}>
+                <XAxis dataKey="name" tick={{fill:"#5a4f7a",fontSize:9}} axisLine={false} tickLine={false} angle={-35} textAnchor="end" />
+                <YAxis tick={{fill:"#5a4f7a",fontSize:11}} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="likes" name="Likes" fill="#4ade80" radius={[4,4,0,0]} />
+                <Bar dataKey="comments" name="Comments" fill="#60a5fa" radius={[4,4,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartBox>
+        )}
+
+        <ChartBox title="Posts per Team Member">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={memberData} layout="vertical" margin={{top:0,right:20,left:10,bottom:0}}>
+              <XAxis type="number" tick={{fill:"#5a4f7a",fontSize:11}} axisLine={false} tickLine={false} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" tick={{fill:"#7c6fa0",fontSize:11}} axisLine={false} tickLine={false} width={60} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="posts" name="Posts" radius={[0,6,6,0]}>
+                {memberData.map((d,i)=><Cell key={i} fill={d.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartBox>
+      </div>
+    </div>
+  );
+}
+
+// ─── App Root ─────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [posts, setPosts] = useState(SAMPLE_POSTS);
+  const [view, setView] = useState("board");
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [showNewPost, setShowNewPost] = useState(false);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterPlatform, setFilterPlatform] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const handleStatusChange = (id, newStatus) => {
+    setPosts(ps => ps.map(p => p.id===id ? {...p, status:newStatus} : p));
+    setSelectedPost(prev => prev?.id===id ? {...prev, status:newStatus} : prev);
+  };
+
+  const handleNewPost = post => { setPosts(ps=>[post,...ps]); setShowNewPost(false); };
+
+  const filteredPosts = posts.filter(p => {
+    if (filterStatus!=="all" && p.status!==filterStatus) return false;
+    if (filterPlatform!=="all" && !p.platforms.includes(filterPlatform)) return false;
+    if (search && !p.title.toLowerCase().includes(search.toLowerCase()) && !p.caption.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const statusCounts = Object.keys(STATUS_COLORS).reduce((acc,s)=>({...acc,[s]:posts.filter(p=>p.status===s).length}),{});
+
+  const VIEWS = [
+    { id:"board",     label:"⊞ Board" },
+    { id:"calendar",  label:"📆 Calendar" },
+    { id:"team",      label:"👥 Team" },
+    { id:"analytics", label:"📊 Analytics" },
+  ];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#080610", fontFamily:"'Inter',-apple-system,sans-serif", color:"#c4b5e0" }}>
+      {/* Header */}
+      <div style={{ borderBottom:"1px solid #16122a", padding:"0 24px", background:"#0d0a1a", position:"sticky", top:0, zIndex:100, display:"flex", alignItems:"center", gap:16, height:56, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+          <div style={{ width:30, height:30, borderRadius:8, background:"linear-gradient(135deg,#7c3aed,#a855f7)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15 }}>📅</div>
+          <div style={{ fontSize:15, fontWeight:800, color:"#e2d9f3", letterSpacing:-0.3 }}>ContentFlow</div>
+        </div>
+
+        <div style={{ display:"flex", gap:3 }}>
+          {VIEWS.map(v => (
+            <button key={v.id} onClick={()=>setView(v.id)} style={{
+              padding:"5px 13px", borderRadius:7, border:"none", cursor:"pointer",
+              background:view===v.id?"#1e1a2e":"transparent",
+              color:view===v.id?"#a855f7":"#5a4f7a",
+              fontSize:12, fontWeight:600, transition:"all 0.15s",
+            }}>{v.label}</button>
+          ))}
+        </div>
+
+        <div style={{ flex:1 }} />
+
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search posts…"
+          style={{ padding:"6px 12px", borderRadius:8, border:"1px solid #2a2040", background:"#110e1a", color:"#c4b5e0", fontSize:12, outline:"none", width:160 }} />
+
+        <button onClick={()=>setShowNewPost(true)} style={{
+          padding:"7px 16px", borderRadius:9, border:"none",
+          background:"linear-gradient(135deg,#7c3aed,#a855f7)",
+          color:"#fff", cursor:"pointer", fontSize:12, fontWeight:700,
+          boxShadow:"0 4px 14px rgba(124,58,237,0.35)", whiteSpace:"nowrap",
+        }}>+ New Post</button>
+      </div>
+
+      <div style={{ padding:"22px 24px" }}>
+        {/* Status filter strip (not on analytics) */}
+        {view !== "analytics" && (
+          <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
+            {Object.entries(statusCounts).map(([s,count]) => {
+              const sc=STATUS_COLORS[s]; const active=filterStatus===s;
+              return (
+                <button key={s} onClick={()=>setFilterStatus(filterStatus===s?"all":s)} style={{
+                  padding:"6px 14px", borderRadius:99, cursor:"pointer",
+                  border:`1px solid ${active?sc.text:sc.border}`,
+                  background:active?sc.text+"22":sc.bg,
+                  color:active?sc.text:"#5a4f7a", fontSize:11, fontWeight:600,
+                  textTransform:"capitalize", transition:"all 0.15s",
+                  display:"flex", alignItems:"center", gap:5,
+                }}>
+                  <span style={{ fontSize:15, fontWeight:800, color:sc.text }}>{count}</span>{s}
+                </button>
+              );
+            })}
+            <div style={{ display:"flex", gap:6, marginLeft:"auto" }}>
+              {PLATFORMS.map(p => (
+                <button key={p.id} onClick={()=>setFilterPlatform(filterPlatform===p.id?"all":p.id)} style={{
+                  padding:"6px 11px", borderRadius:8, cursor:"pointer",
+                  border:`1px solid ${filterPlatform===p.id?p.color:"#2a2040"}`,
+                  background:filterPlatform===p.id?p.color+"22":"#0f0c1a",
+                  color:filterPlatform===p.id?p.color:"#5a4f7a",
+                  fontSize:12, fontWeight:700, transition:"all 0.15s",
+                }}>{p.icon}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {view==="board"     && <BoardView posts={filteredPosts} onPostClick={setSelectedPost} onStatusChange={handleStatusChange} />}
+        {view==="calendar"  && <CalendarView posts={filteredPosts} onPostClick={setSelectedPost} />}
+        {view==="team"      && <TeamView posts={filteredPosts} />}
+        {view==="analytics" && <AnalyticsView posts={posts} />}
+      </div>
+
+      {selectedPost && (
+        <PostDetail post={selectedPost} onClose={()=>setSelectedPost(null)} onStatusChange={handleStatusChange} />
+      )}
+      {showNewPost && (
+        <NewPostModal onClose={()=>setShowNewPost(false)} onSave={handleNewPost} />
+      )}
+    </div>
+  );
+}
