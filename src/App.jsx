@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import MediaManager from "./components/MediaManager.jsx";
 import ContentScheduler from "./components/ContentScheduler.jsx";
 import SocialConnections from "./components/SocialConnections.jsx";
@@ -84,7 +85,9 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell">
+    <>
+      <Analytics />
+      <div className="app-shell">
       <header className="app-header">
         <div>
           <p className="eyebrow">ContentFlow</p>
@@ -160,5 +163,6 @@ export default function App() {
         </section>
       </main>
     </div>
+    </>
   );
 }
